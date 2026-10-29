@@ -1,0 +1,143 @@
+@page "/appointments"
+@attribute [Authorize(Roles = Roles.Patient)]
+@inject IAppointmentApi AppointmentApi
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject BookingConfirmationStore ConfirmationStore
+
+<PageTitle>My appointments</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h4" HtmlTag="h1">My appointments</MudText>
+    <MudButton Href="clinics" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Book new</MudButton>
+</MudStack>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_appointments is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudText Typo="Typo.h6" Class="mb-2">Upcoming</MudText>
+    @if (!Upcoming.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-6">You have no upcoming appointments.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="Upcoming" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-6" Elevation="1">
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Time</MudTh>
+                <MudTh>Clinic</MudTh>
+                <MudTh>Reference</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Date">@DisplayFormat.Date(context.StartTime)</MudTd>
+                <MudTd DataLabel="Time">@DisplayFormat.TimeRange(context.StartTime, context.EndTime)</MudTd>
+                <MudTd DataLabel="Clinic">@context.ClinicName</MudTd>
+                <MudTd DataLabel="Reference"><code class="reference">@context.ReferenceNumber</code></MudTd>
+                <MudTd Style="text-align:right">
+                    @if (context.CanModify)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.EditCalendar" OnClick="@(() => RescheduleAsync(context))">Reschedule</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="ml-1"
+                                   OnClick="@(() => CancelAsync(context))">Cancel</MudButton>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    @if (History.Any())
+    {
+        <MudText Typo="Typo.h6" Class="mb-2">Past and cancelled</MudText>
+        <MudTable Items="History" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true">
+            <HeaderContent>
+                <MudTh>Date</MudTh>
+                <MudTh>Time</MudTh>
+                <MudTh>Clinic</MudTh>
+                <MudTh>Reference</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Date">@DisplayFormat.Date(context.StartTime)</MudTd>
+                <MudTd DataLabel="Time">@DisplayFormat.Time(context.StartTime)</MudTd>
+                <MudTd DataLabel="Clinic">@context.ClinicName</MudTd>
+                <MudTd DataLabel="Reference"><code class="reference">@context.ReferenceNumber</code></MudTd>
+                <MudTd DataLabel="Status"><StatusChip Status="@context.Status" /></MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+@code {
+    private IReadOnlyList<AppointmentDto>? _appointments;
+    private string? _error;
+
+    private IEnumerable<AppointmentDto> Upcoming =>
+        (_appointments ?? []).Where(a => a.CanModify).OrderBy(a => a.StartTime);
+
+    private IEnumerable<AppointmentDto> History =>
+        (_appointments ?? []).Where(a => !a.CanModify);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _appointments = await AppointmentApi.GetMineAsync();
+            _error = null;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task CancelAsync(AppointmentDto appointment)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Cancel appointment?",
+            $"Cancel your appointment at {appointment.ClinicName} on {DisplayFormat.Date(appointment.StartTime)} at {DisplayFormat.Time(appointment.StartTime)}? The time will be released to other patients.",
+            yesText: "Cancel appointment", cancelText: "Keep it");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await AppointmentApi.CancelAsync(appointment.Id);
+            Snackbar.Add($"Appointment {appointment.ReferenceNumber} cancelled.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RescheduleAsync(AppointmentDto appointment)
+    {
+        var parameters = new DialogParameters<RescheduleDialog> { { x => x.Appointment, appointment } };
+        var dialog = await DialogService.ShowAsync<RescheduleDialog>("Reschedule", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: BookingConfirmationDto confirmation })
+        {
+            ConfirmationStore.Set(confirmation);
+            Navigation.NavigateTo($"appointments/{confirmation.Appointment.Id}/confirmation");
+        }
+    }
+}

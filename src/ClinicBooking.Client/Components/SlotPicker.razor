@@ -1,0 +1,116 @@
+@* Lets the user pick a day and then one of that day's available slots at a clinic. *@
+@inject IClinicApi ClinicApi
+
+<MudStack Spacing="3">
+    <MudDatePicker Label="Date" Date="_date" DateChanged="OnDateChangedAsync"
+                   MinDate="DateTime.Today" MaxDate="DateTime.Today.AddDays(60)"
+                   DateFormat="ddd d MMM yyyy" Variant="Variant.Outlined" Style="max-width: 280px" />
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else if (_slots.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            No available times on this day. Please try another date.
+        </MudAlert>
+    }
+    else
+    {
+        @foreach (var group in _slots.GroupBy(s => s.StartTime.Hour < 12 ? "Morning" : "Afternoon"))
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-1">@group.Key</MudText>
+            <div class="slot-grid">
+                @foreach (var slot in group)
+                {
+                    var selected = slot.Id == SelectedSlotId;
+                    <MudButton Variant="@(selected ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                               OnClick="@(() => OnSlotSelected.InvokeAsync(slot))"
+                               aria-pressed="@selected.ToString().ToLowerInvariant()">
+                        <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                            <span>@DisplayFormat.Time(slot.StartTime)</span>
+                            <MudText Typo="Typo.caption">@slot.RemainingCapacity left</MudText>
+                        </MudStack>
+                    </MudButton>
+                }
+            </div>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Guid ClinicId { get; set; }
+
+    /// <summary>Highlighted slot, if any.</summary>
+    [Parameter] public Guid? SelectedSlotId { get; set; }
+
+    /// <summary>A slot to leave out of the list, e.g. the appointment's current slot when rescheduling.</summary>
+    [Parameter] public Guid? ExcludeSlotId { get; set; }
+
+    [Parameter] public EventCallback<TimeSlotDto> OnSlotSelected { get; set; }
+
+    /// <summary>How many days ahead to search for the first day with open slots when the picker opens.</summary>
+    private const int LookAheadDays = 14;
+
+    private DateTime? _date = DateTime.Today;
+    private List<TimeSlotDto> _slots = [];
+    private bool _loading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSlotsAsync();
+
+        // Start on the first day that has availability, so users are not greeted by an empty day
+        // (e.g. after closing time or on a weekend).
+        for (var day = 1; day <= LookAheadDays && _slots.Count == 0 && _error is null; day++)
+        {
+            _date = DateTime.Today.AddDays(day);
+            await LoadSlotsAsync();
+        }
+
+        if (_slots.Count == 0 && _error is null)
+        {
+            _date = DateTime.Today;
+        }
+    }
+
+    /// <summary>Reloads the slots, e.g. after a booking attempt failed because a slot filled up.</summary>
+    public Task RefreshAsync() => LoadSlotsAsync();
+
+    private async Task OnDateChangedAsync(DateTime? date)
+    {
+        _date = date;
+        await LoadSlotsAsync();
+    }
+
+    private async Task LoadSlotsAsync()
+    {
+        if (_date is null)
+        {
+            _slots = [];
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            var slots = await ClinicApi.GetAvailableSlotsAsync(ClinicId, DateOnly.FromDateTime(_date.Value));
+            _slots = slots.Where(s => s.Id != ExcludeSlotId).ToList();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

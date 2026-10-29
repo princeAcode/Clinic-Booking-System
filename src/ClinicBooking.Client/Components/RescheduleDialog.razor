@@ -1,0 +1,76 @@
+@* Moves an appointment to another slot at the same clinic. Closes with the BookingConfirmationDto on success. *@
+@inject IAppointmentApi AppointmentApi
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Reschedule appointment</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2">
+                Currently booked at <b>@Appointment.ClinicName</b> on
+                <b>@DisplayFormat.Date(Appointment.StartTime)</b> at <b>@DisplayFormat.Time(Appointment.StartTime)</b>.
+                Choose a new time below. Your reference number stays the same.
+            </MudText>
+
+            <SlotPicker @ref="_picker" ClinicId="Appointment.ClinicId" ExcludeSlotId="Appointment.TimeSlotId"
+                        SelectedSlotId="_selected?.Id" OnSlotSelected="slot => _selected = slot" />
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())" Disabled="_submitting">Keep current time</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RescheduleAsync"
+                   Disabled="@(_submitting || _selected is null)">
+            @if (_selected is null)
+            {
+                <span>Choose a time</span>
+            }
+            else
+            {
+                <span>Move to @DisplayFormat.Date(_selected.StartTime) @DisplayFormat.Time(_selected.StartTime)</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public AppointmentDto Appointment { get; set; } = default!;
+
+    private SlotPicker _picker = default!;
+    private TimeSlotDto? _selected;
+    private bool _submitting;
+    private string? _error;
+
+    private async Task RescheduleAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var confirmation = await AppointmentApi.RescheduleAsync(Appointment.Id, new RescheduleAppointmentRequest { NewTimeSlotId = _selected.Id });
+            MudDialog.Close(DialogResult.Ok(confirmation));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+            _selected = null;
+            await _picker.RefreshAsync();
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

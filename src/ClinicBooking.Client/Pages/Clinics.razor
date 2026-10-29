@@ -1,0 +1,79 @@
+@page "/clinics"
+@inject IClinicApi ClinicApi
+
+<PageTitle>Find a clinic</PageTitle>
+
+<MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Find a clinic</MudText>
+
+<MudTextField @bind-Value="_search" Placeholder="Search by name, area or district" Adornment="Adornment.Start"
+              AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Immediate="true"
+              Class="mb-4" Style="max-width: 480px" />
+
+@if (_clinics is null && _error is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (!Filtered.Any())
+{
+    <MudAlert Severity="Severity.Info">No clinics match "@_search".</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var clinic in Filtered)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Style="height:100%; display:flex; flex-direction:column">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">@clinic.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@clinic.District</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Style="flex-grow:1">
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@clinic.Address</MudText>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@clinic.PhoneNumber</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Href="@($"clinics/{clinic.Id}")" Variant="Variant.Filled" Color="Color.Primary"
+                                   EndIcon="@Icons.Material.Filled.ArrowForward">See available times</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private IReadOnlyList<ClinicDto>? _clinics;
+    private string? _error;
+    private string _search = string.Empty;
+
+    private IEnumerable<ClinicDto> Filtered =>
+        (_clinics ?? []).Where(c => string.IsNullOrWhiteSpace(_search)
+            || c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || c.Address.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || c.District.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _clinics = await ClinicApi.GetClinicsAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

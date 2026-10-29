@@ -1,0 +1,88 @@
+@page "/appointments/{AppointmentId:guid}/confirmation"
+@attribute [Authorize]
+@inject IAppointmentApi AppointmentApi
+@inject BookingConfirmationStore ConfirmationStore
+
+<PageTitle>Appointment confirmed</PageTitle>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_appointment is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-6 mx-auto" Elevation="2" Style="max-width: 640px">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Style="font-size: 4rem" />
+            <MudText Typo="Typo.h4" HtmlTag="h1" Align="Align.Center">
+                @(_appointment.Status == "Booked" ? "You're booked!" : $"Appointment {_appointment.Status.ToLowerInvariant()}")
+            </MudText>
+            <MudText Typo="Typo.overline">Reference number</MudText>
+            <MudText Typo="Typo.h5" Style="letter-spacing: 2px; font-family: monospace" data-testid="reference">@_appointment.ReferenceNumber</MudText>
+        </MudStack>
+
+        @if (_message is not null)
+        {
+            <MudAlert Severity="Severity.Success" Class="my-4">@_message</MudAlert>
+        }
+
+        <MudSimpleTable Dense="true" Elevation="0" Class="mt-4">
+            <tbody>
+                <tr><th scope="row">Clinic</th><td>@_appointment.ClinicName</td></tr>
+                <tr><th scope="row">Address</th><td>@_appointment.ClinicAddress</td></tr>
+                <tr><th scope="row">Date</th><td>@DisplayFormat.Date(_appointment.StartTime)</td></tr>
+                <tr><th scope="row">Time</th><td>@DisplayFormat.TimeRange(_appointment.StartTime, _appointment.EndTime)</td></tr>
+                <tr><th scope="row">Patient</th><td>@_appointment.PatientName</td></tr>
+                @if (!string.IsNullOrWhiteSpace(_appointment.Reason))
+                {
+                    <tr><th scope="row">Reason</th><td>@_appointment.Reason</td></tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudText Typo="Typo.body2" Class="mt-4">
+            Please arrive 15 minutes early and bring your ID document or clinic card.
+        </MudText>
+
+        <MudStack Row="true" Justify="Justify.Center" Class="mt-6">
+            <MudButton Href="appointments" Variant="Variant.Filled" Color="Color.Primary">My appointments</MudButton>
+            <MudButton OnClick="Print" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Print">Print</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid AppointmentId { get; set; }
+
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private AppointmentDto? _appointment;
+    private string? _message;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var confirmation = ConfirmationStore.Take(AppointmentId);
+        if (confirmation is not null)
+        {
+            _appointment = confirmation.Appointment;
+            _message = confirmation.Message;
+            return;
+        }
+
+        try
+        {
+            _appointment = await AppointmentApi.GetAsync(AppointmentId);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task Print() => await Js.InvokeVoidAsync("print");
+}

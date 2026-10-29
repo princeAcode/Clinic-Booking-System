@@ -1,0 +1,96 @@
+@page "/register"
+@inject IAuthApi AuthApi
+@inject JwtAuthenticationStateProvider AuthState
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Register</PageTitle>
+
+<MudPaper Class="pa-6 mx-auto" Elevation="2" Style="max-width: 640px">
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Create a patient account</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">You need an account to book, cancel or reschedule appointments.</MudText>
+
+    <MudForm @ref="_form" Model="_request" Validation="@MudValidation.For(_validator)">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.FirstName" For="@(() => _request.FirstName)" Label="First name" Variant="Variant.Outlined" autocomplete="given-name" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.LastName" For="@(() => _request.LastName)" Label="Last name" Variant="Variant.Outlined" autocomplete="family-name" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.IdNumber" For="@(() => _request.IdNumber)" Label="SA ID or passport number" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_request.DateOfBirth" For="@(() => _request.DateOfBirth)" Label="Date of birth"
+                               MaxDate="DateTime.Today" OpenTo="OpenTo.Year" Variant="Variant.Outlined" Editable="true"
+                               DateFormat="yyyy-MM-dd" Placeholder="yyyy-mm-dd" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.PhoneNumber" For="@(() => _request.PhoneNumber)" Label="Mobile number" Variant="Variant.Outlined" InputType="InputType.Telephone" autocomplete="tel" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.Email" For="@(() => _request.Email)" Label="Email" Variant="Variant.Outlined" InputType="InputType.Email" autocomplete="email" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.Password" For="@(() => _request.Password)" Label="Password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" HelperText="At least 8 characters with upper, lower case and a digit" autocomplete="new-password" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_request.ConfirmPassword" For="@(() => _request.ConfirmPassword)" Label="Confirm password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" autocomplete="new-password" />
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" FullWidth="true" Class="mt-6"
+               OnClick="RegisterAsync" Disabled="_submitting">
+        @(_submitting ? "Creating account..." : "Create account")
+    </MudButton>
+
+    <MudText Typo="Typo.body2" Class="mt-4">
+        Already registered? <MudLink Href="@($"login{(string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={Uri.EscapeDataString(ReturnUrl)}")}")">Sign in</MudLink>
+    </MudText>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private readonly RegisterPatientRequestValidator _validator = new();
+    private readonly RegisterPatientRequest _request = new();
+    private MudForm _form = default!;
+    private bool _submitting;
+    private string? _error;
+
+    private async Task RegisterAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var response = await AuthApi.RegisterAsync(_request);
+            await AuthState.SignInAsync(response.Token);
+            Snackbar.Add("Welcome! Your account has been created.", Severity.Success);
+            Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl, Navigation, fallback: "clinics"));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

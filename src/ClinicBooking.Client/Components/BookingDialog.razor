@@ -1,0 +1,82 @@
+@* Confirms a booking for the chosen slot. Closes with the BookingConfirmationDto on success. *@
+@inject IAppointmentApi AppointmentApi
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Confirm your appointment</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudSimpleTable Dense="true" Elevation="0" Bordered="false">
+                <tbody>
+                    <tr><th scope="row">Clinic</th><td>@Clinic.Name</td></tr>
+                    <tr><th scope="row">Address</th><td>@Clinic.Address</td></tr>
+                    <tr><th scope="row">Date</th><td>@DisplayFormat.Date(Slot.StartTime)</td></tr>
+                    <tr><th scope="row">Time</th><td>@DisplayFormat.TimeRange(Slot.StartTime, Slot.EndTime)</td></tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <MudForm @ref="_form" Model="_request" Validation="@MudValidation.For(_validator)">
+                <MudTextField @bind-Value="_request.Reason" For="@(() => _request.Reason)"
+                              Label="Reason for visit (optional)" Variant="Variant.Outlined"
+                              Lines="3" Counter="BookAppointmentRequestValidator.ReasonMaxLength"
+                              HelperText="Helps the clinic prepare. Do not include sensitive details you would not want staff to see." />
+            </MudForm>
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())" Disabled="_submitting">Back</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BookAsync" Disabled="_submitting">
+            @if (_submitting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Confirm booking
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ClinicDto Clinic { get; set; } = default!;
+    [Parameter, EditorRequired] public TimeSlotDto Slot { get; set; } = default!;
+
+    private readonly BookAppointmentRequestValidator _validator = new();
+    private BookAppointmentRequest _request = new();
+    private MudForm _form = default!;
+    private bool _submitting;
+    private string? _error;
+
+    protected override void OnParametersSet() => _request.TimeSlotId = Slot.Id;
+
+    private async Task BookAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var confirmation = await AppointmentApi.BookAsync(_request);
+            MudDialog.Close(DialogResult.Ok(confirmation));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

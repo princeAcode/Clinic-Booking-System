@@ -1,0 +1,14 @@
+<MudNavMenu Class="pt-2">
+    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+    <MudNavLink Href="clinics" Icon="@Icons.Material.Filled.LocalHospital">Find a clinic</MudNavLink>
+
+    <AuthorizeView Roles="@Roles.Patient">
+        <MudNavLink Href="appointments" Icon="@Icons.Material.Filled.EventNote">My appointments</MudNavLink>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="@Roles.StaffOrAdmin">
+        <MudDivider Class="my-2" />
+        <MudText Typo="Typo.overline" Class="px-4">Clinic staff</MudText>
+        <MudNavLink Href="staff/schedule" Icon="@Icons.Material.Filled.CalendarMonth">Daily schedule</MudNavLink>
+    </AuthorizeView>
+</MudNavMenu>

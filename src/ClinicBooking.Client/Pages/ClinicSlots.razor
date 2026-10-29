@@ -1,0 +1,88 @@
+@page "/clinics/{ClinicId:guid}"
+@inject IClinicApi ClinicApi
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject BookingConfirmationStore ConfirmationStore
+
+<PageTitle>@(_clinic?.Name ?? "Clinic") – available times</PageTitle>
+
+<MudButton Href="clinics" StartIcon="@Icons.Material.Filled.ArrowBack" Variant="Variant.Text" Class="mb-2">All clinics</MudButton>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_clinic is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudText Typo="Typo.h4" HtmlTag="h1">@_clinic.Name</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">@_clinic.Address · @_clinic.PhoneNumber</MudText>
+
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudText Typo="Typo.h6" GutterBottom="true">Choose a time</MudText>
+        <SlotPicker @ref="_picker" ClinicId="ClinicId" OnSlotSelected="OnSlotSelectedAsync" />
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid ClinicId { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
+    private ClinicDto? _clinic;
+    private SlotPicker _picker = default!;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _clinic = await ClinicApi.GetClinicAsync(ClinicId);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnSlotSelectedAsync(TimeSlotDto slot)
+    {
+        var user = (await AuthenticationState).User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Snackbar.Add("Please sign in or register to book an appointment.", Severity.Info);
+            Navigation.NavigateTo($"login?returnUrl={Uri.EscapeDataString($"clinics/{ClinicId}")}");
+            return;
+        }
+
+        if (!user.IsInRole(Roles.Patient))
+        {
+            Snackbar.Add("Only patient accounts can book appointments.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<BookingDialog>
+        {
+            { x => x.Clinic, _clinic! },
+            { x => x.Slot, slot },
+        };
+        var dialog = await DialogService.ShowAsync<BookingDialog>("Confirm booking", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: BookingConfirmationDto confirmation })
+        {
+            ConfirmationStore.Set(confirmation);
+            Navigation.NavigateTo($"appointments/{confirmation.Appointment.Id}/confirmation");
+        }
+        else
+        {
+            // The slot may have filled up while the dialog was open.
+            await _picker.RefreshAsync();
+        }
+    }
+}

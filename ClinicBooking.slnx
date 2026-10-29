@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ClinicBooking.Api/ClinicBooking.Api.csproj" />
+    <Project Path="src/ClinicBooking.Application/ClinicBooking.Application.csproj" />
+    <Project Path="src/ClinicBooking.Client/ClinicBooking.Client.csproj" />
+    <Project Path="src/ClinicBooking.Contracts/ClinicBooking.Contracts.csproj" />
+    <Project Path="src/ClinicBooking.Domain/ClinicBooking.Domain.csproj" />
+    <Project Path="src/ClinicBooking.Infrastructure/ClinicBooking.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ClinicBooking.Client.Tests/ClinicBooking.Client.Tests.csproj" />
+    <Project Path="tests/ClinicBooking.UnitTests/ClinicBooking.UnitTests.csproj" />
+  </Folder>
+</Solution>

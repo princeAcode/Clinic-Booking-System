@@ -1,0 +1,74 @@
+@page "/login"
+@inject IAuthApi AuthApi
+@inject JwtAuthenticationStateProvider AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in</PageTitle>
+
+<MudPaper Class="pa-6 mx-auto" Elevation="2" Style="max-width: 440px">
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Sign in</MudText>
+
+    <MudForm @ref="_form" Model="_request" Validation="@MudValidation.For(_validator)">
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_request.Email" For="@(() => _request.Email)" Label="Email" Immediate="true"
+                          InputType="InputType.Email" Variant="Variant.Outlined" autocomplete="username" />
+            <MudTextField @bind-Value="_request.Password" For="@(() => _request.Password)" Label="Password"
+                          InputType="InputType.Password" Variant="Variant.Outlined" autocomplete="current-password"
+                          Immediate="true" OnKeyUp="OnPasswordKeyUpAsync" />
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" FullWidth="true"
+                       OnClick="SignInAsync" Disabled="_submitting">
+                @(_submitting ? "Signing in..." : "Sign in")
+            </MudButton>
+        </MudStack>
+    </MudForm>
+
+    <MudText Typo="Typo.body2" Class="mt-4">
+        New patient? <MudLink Href="@($"register{ReturnQuery}")">Create an account</MudLink>
+    </MudText>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private readonly LoginRequestValidator _validator = new();
+    private readonly LoginRequest _request = new();
+    private MudForm _form = default!;
+    private bool _submitting;
+    private string? _error;
+
+    private string ReturnQuery => string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+    private Task OnPasswordKeyUpAsync(KeyboardEventArgs e) => e.Key == "Enter" ? SignInAsync() : Task.CompletedTask;
+
+    private async Task SignInAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var response = await AuthApi.LoginAsync(_request);
+            await AuthState.SignInAsync(response.Token);
+            Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl, Navigation));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

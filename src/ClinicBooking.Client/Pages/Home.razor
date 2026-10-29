@@ -1,0 +1,41 @@
+@page "/"
+
+<PageTitle>PHCIS Clinic Booking</PageTitle>
+
+<MudPaper Class="pa-8 mb-6" Elevation="0" Style="background: linear-gradient(135deg, #00796B 0%, #26A69A 100%); color: white;">
+    <MudText Typo="Typo.h3" HtmlTag="h1" GutterBottom="true">Book a clinic appointment</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-6">
+        Choose your local clinic, pick a time that suits you and get an instant confirmation. No more queuing to book.
+    </MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Surface" Size="Size.Large" Href="clinics"
+               StartIcon="@Icons.Material.Filled.Search" Style="color:#00796B">Find a clinic</MudButton>
+    <AuthorizeView Roles="@Roles.Patient">
+        <MudButton Variant="Variant.Outlined" Color="Color.Inherit" Size="Size.Large" Href="appointments" Class="ml-3">
+            My appointments
+        </MudButton>
+    </AuthorizeView>
+</MudPaper>
+
+<MudGrid>
+    @foreach (var (icon, title, text) in Steps)
+    {
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="1" Style="height:100%">
+                <MudCardContent>
+                    <MudIcon Icon="@icon" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Class="mt-2">@title</MudText>
+                    <MudText Typo="Typo.body2">@text</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private static readonly (string Icon, string Title, string Text)[] Steps =
+    [
+        (Icons.Material.Filled.LocalHospital, "1. Choose a clinic", "Browse primary health care clinics in your district."),
+        (Icons.Material.Filled.Schedule, "2. Pick a time", "See the times that are still open and choose one that suits you."),
+        (Icons.Material.Filled.CheckCircle, "3. Get confirmation", "Receive a reference number instantly. Cancel or reschedule online if plans change."),
+    ];
+}

@@ -1,0 +1,33 @@
+# Local environment: PostgreSQL + the API (which also serves the Blazor client).
+#   docker compose up -d db      -> database only, run the app with `dotnet run`
+#   docker compose up --build    -> everything, app on http://localhost:8080
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: clinic_booking
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: clinic_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - clinic-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic -d clinic_booking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__ClinicBooking: Host=db;Port=5432;Database=clinic_booking;Username=clinic;Password=clinic_dev_password
+    ports:
+      - "8080:8080"
+
+volumes:
+  clinic-db:

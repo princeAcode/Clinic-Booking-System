@@ -1,0 +1,229 @@
+@page "/staff/schedule"
+@attribute [Authorize(Roles = Roles.StaffOrAdmin)]
+@inject IClinicApi ClinicApi
+@inject IAppointmentApi AppointmentApi
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Daily schedule</PageTitle>
+
+<MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Daily schedule</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" AlignItems="AlignItems.Center">
+        <MudSelect T="Guid?" Value="_clinicId" ValueChanged="OnClinicChangedAsync" Label="Clinic"
+                   Variant="Variant.Outlined" Style="min-width: 320px">
+            @foreach (var clinic in _clinics)
+            {
+                <MudSelectItem T="Guid?" Value="@clinic.Id">@clinic.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudDatePicker Date="_date" DateChanged="OnDateChangedAsync" Label="Date" DateFormat="ddd d MMM yyyy"
+                       Variant="Variant.Outlined" Style="max-width: 240px" />
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddCircle"
+                   OnClick="@(() => _showGenerate = !_showGenerate)" Disabled="_clinicId is null">Open new slots</MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (_showGenerate && _clinicId is not null)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" GutterBottom="true">Open new appointment slots</MudText>
+        <MudForm @ref="_generateForm" Model="_generate" Validation="@MudValidation.For(_generateValidator)">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_generate.FromDate" For="@(() => _generate.FromDate)" Label="From" MinDate="DateTime.Today" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_generate.ToDate" For="@(() => _generate.ToDate)" Label="To" MinDate="DateTime.Today" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <MudTimePicker @bind-Time="_generate.DayStart" For="@(() => _generate.DayStart)" Label="Opens" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <MudTimePicker @bind-Time="_generate.DayEnd" For="@(() => _generate.DayEnd)" Label="Closes" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <MudNumericField @bind-Value="_generate.SlotDurationMinutes" For="@(() => _generate.SlotDurationMinutes)" Label="Minutes per slot" Variant="Variant.Outlined" Step="5" />
+                </MudItem>
+                <MudItem xs="6" md="3">
+                    <MudNumericField @bind-Value="_generate.CapacityPerSlot" For="@(() => _generate.CapacityPerSlot)" Label="Patients per slot" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="3" Class="d-flex align-center">
+                    <MudSwitch @bind-Value="_generate.IncludeWeekends" Label="Include weekends" Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" md="3" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GenerateAsync" Disabled="_generating">Create slots</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </MudPaper>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_clinicId is not null)
+{
+    <MudStack Row="true" Spacing="2" Class="mb-2">
+        <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined">@_appointments.Count(a => a.Status == "Booked") booked</MudChip>
+        <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined">@_appointments.Count(a => a.Status == "Cancelled") cancelled</MudChip>
+    </MudStack>
+
+    <MudTable Items="_appointments" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1">
+        <NoRecordsContent>
+            <MudText>No appointments on this day.</MudText>
+        </NoRecordsContent>
+        <HeaderContent>
+            <MudTh>Time</MudTh>
+            <MudTh>Patient</MudTh>
+            <MudTh>Phone</MudTh>
+            <MudTh>Reference</MudTh>
+            <MudTh>Reason</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Time">@DisplayFormat.TimeRange(context.StartTime, context.EndTime)</MudTd>
+            <MudTd DataLabel="Patient">@context.PatientName</MudTd>
+            <MudTd DataLabel="Phone">@context.PatientPhoneNumber</MudTd>
+            <MudTd DataLabel="Reference"><code class="reference">@context.ReferenceNumber</code></MudTd>
+            <MudTd DataLabel="Reason">@context.Reason</MudTd>
+            <MudTd DataLabel="Status"><StatusChip Status="@context.Status" /></MudTd>
+            <MudTd>
+                @if (context.CanModify)
+                {
+                    <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => CancelAsync(context))">Cancel</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private IReadOnlyList<ClinicDto> _clinics = [];
+    private IReadOnlyList<AppointmentDto> _appointments = [];
+    private Guid? _clinicId;
+    private DateTime? _date = DateTime.Today;
+    private bool _loading;
+    private string? _error;
+
+    private bool _showGenerate;
+    private bool _generating;
+    private MudForm _generateForm = default!;
+    private readonly GenerateSlotsRequestValidator _generateValidator = new();
+    private GenerateSlotsRequest _generate = NewGenerateRequest();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _clinics = await ClinicApi.GetClinicsAsync();
+            if (_clinics.Count > 0)
+            {
+                await OnClinicChangedAsync(_clinics[0].Id);
+            }
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnClinicChangedAsync(Guid? clinicId)
+    {
+        _clinicId = clinicId;
+        await LoadAsync();
+    }
+
+    private async Task OnDateChangedAsync(DateTime? date)
+    {
+        _date = date;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_clinicId is null || _date is null)
+        {
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _appointments = await ClinicApi.GetClinicAppointmentsAsync(_clinicId.Value, DateOnly.FromDateTime(_date.Value));
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CancelAsync(AppointmentDto appointment)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Cancel appointment?",
+            $"Cancel {appointment.PatientName}'s appointment at {DisplayFormat.Time(appointment.StartTime)}? Please let the patient know.",
+            yesText: "Cancel appointment", cancelText: "Keep it");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await AppointmentApi.CancelAsync(appointment.Id);
+            Snackbar.Add("Appointment cancelled.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task GenerateAsync()
+    {
+        await _generateForm.ValidateAsync();
+        if (!_generateForm.IsValid || _clinicId is null)
+        {
+            return;
+        }
+
+        _generating = true;
+        try
+        {
+            var result = await ClinicApi.GenerateSlotsAsync(_clinicId.Value, _generate);
+            Snackbar.Add($"{result.SlotsCreated} slots created.", Severity.Success);
+            _generate = NewGenerateRequest();
+            _showGenerate = false;
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+
+    private static GenerateSlotsRequest NewGenerateRequest() => new()
+    {
+        FromDate = DateTime.Today.AddDays(1),
+        ToDate = DateTime.Today.AddDays(7),
+    };
+}

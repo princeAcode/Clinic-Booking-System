@@ -1,0 +1,13 @@
+<MudChip T="string" Size="Size.Small" Color="@ColorFor(Status)" Variant="Variant.Outlined">@Status</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;
+
+    private static Color ColorFor(string status) => status switch
+    {
+        "Booked" => Color.Success,
+        "Cancelled" => Color.Error,
+        "Completed" => Color.Info,
+        _ => Color.Default,
+    };
+}
